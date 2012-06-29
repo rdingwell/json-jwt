@@ -60,7 +60,15 @@ module JSON
         signature_base_string = jwt_string.split('.')[0, 2].join('.')
         jwt = new JSON.parse(claims)
         jwt.header = JSON.parse(header).with_indifferent_access
-        jwt.verify signature_base_string, signature, public_key_or_secret
+        
+        kid = jwt.header['kid']
+        key = case public_key_or_secret
+          when JWK::KeySet
+           public_key_or_secret[kid].to_key
+          else
+            public_key_or_secret
+        end 
+        jwt.verify signature_base_string, signature, key    
         jwt
       rescue JSON::ParserError
         raise InvalidFormat.new("Invalid JSON Format")
@@ -82,3 +90,5 @@ end
 
 require 'json/jws'
 require 'json/jwe'
+require 'json/jwa'
+require 'json/jwk'
