@@ -26,10 +26,19 @@ module JSON
       end
 
       def valid_int?(alg)
-       INT.collect(&:to_s).include? alg.to_s
+        INT.collect(&:to_s).include? alg.to_s
       end
+      
+      def aead?(alg)
+        [:A128GCM, :A256GCM].collect(&:to_s).include? alg.to_s
+      end
+      
+      def openssl_encoding(encoding)
+        if valid_enc?(encoding)
+         return "aes-#{encoding.to_s[1,3]}-#{encoding.to_s[4,3]}".downcase
+        end
     end
-
+  end
 
     def self.generate_digest(alg)
        OpenSSL::Digest::Digest.new "SHA#{alg.to_s[2, 3]}"

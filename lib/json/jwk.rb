@@ -23,13 +23,11 @@ module JSON
       end
             
       def to_key
-       key =  case JSON::JWA.type?(alg)
-          when :rsa
+       key =  case self.alg.to_sym
+          when :RSA
             to_rsa_key
-          when :ec
+          when :EC
             to_ec_key
-          when :aes
-            to_aes_key
           else         
         end
         key
@@ -50,11 +48,10 @@ module JSON
         raise NotImplementedError.new
       end
       
-      def to_aes_key
-        raise NotImplementedError.new
+      def decode(str)
+         UrlSafeBase64.decode64(str).unpack('B*').first.to_i(2).to_s
       end
-      
-      
+            
     end
     
     class KeySet 
@@ -78,7 +75,7 @@ module JSON
       jwk_str = open(url).read
       json = JSON.parse(jwk_str)
       keys = json["keys"] || []
-      KeySet.new(keys.collect{|k| Key.new(k)})    
+      KeySet.new(keys.collect{|k| Key.new(nil).merge k})    
     end
     
   end

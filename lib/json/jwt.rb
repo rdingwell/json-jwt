@@ -89,6 +89,6 @@ module JSON
 end
 
 require 'json/jws'
-require 'json/jwe'
 require 'json/jwa'
 require 'json/jwk'
+require 'json/jwe'

@@ -6,13 +6,13 @@ module JSON
     
     attr_accessor :cipher_text
     attr_accessor :data
-    attr_accessor :iv
     attr_accessor :encrypted_key
     attr_accessor :cmk
-    
+    attr_accessor :iv
     def initialize(jwt)
-      @header = { :alg => :RS,
-                  :enc => :AES256CBC,
+      @header = { :alg => :RSA1_5,
+                  :enc => :A256CBC,
+                  :int => :HS256,
                   :type => :JWE
       }
       
@@ -25,24 +25,24 @@ module JSON
       header[:kid] = kid
       generate_cmk(encoding)
       cek,cik = derive_keys(cmk,1) 
-      encrypted_key = encrypt_cek(key,cmk,algorithm)
-      cipher = generate_cipher(encoding,true, cek, header[:iv])
-      cipher_text = cipher.update(data)
-      cipher_text << cipher.final
+      @encrypted_key = encrypt_cmk(key,cmk)
+      cipher = generate_cipher(openssl_encoding(encoding),true, cek, ivec)
+      @cipher_text = cipher.update(data)
+      @cipher_text << cipher.final
       sb = signature_base_string
       
-      aead?(encoding) ? sb + "." : "#{sb}.#{sign(sb,cik,integrity)}"
+      aead?(encoding) ? sb + "." : "#{sb}.#{UrlSafeBase64.encode64(sign(sb,cik))}"
     end
     
     def decrypt(key)
       alg = header[:enc]
-      cmk = decrypt_cmk(key, encrypted_key,alg)
+      cmk = decrypt_cmk(key, encrypted_key)
       cek,cik = derive_keys(cmk,1)
       unless aead?(encoding) 
         verify(cik)
       end
-      cipher = generate_cipher(encoding,false, cek, header[:iv])
-      data = cipher.update(Base64.strict_decode64(edata))
+      cipher = generate_cipher(openssl_encoding(encoding),false, cek, ivec)
+      data = cipher.update(cipher_text)
       data << cipher.final
       data
     end
@@ -50,13 +50,14 @@ module JSON
 
     def signature_base_string
       [header.to_json,encrypted_key,cipher_text].collect do |segment|
-        UrlSafeBase64.encode(segment)
+        UrlSafeBase64.encode64(segment)
       end.join(".")
     end
 
 
     def verify(cik)
       raise "Verification Error" unless iv == OpenSSL::HMAC.digest( digest(integrity), cik, signature_base_string)
+      true
     end
     
     def self.encrypt(data,key,alg,enc,int=nil, kid=nil)
@@ -74,55 +75,58 @@ module JSON
         UrlSafeBase64.decode64 segment.to_s
       end
       
-      jwe = JWE.new
+      jwe = JWE.new nil
       jwe.header = JSON.parse(header)
       jwe.cipher_text = cipher_text
       jwe.encrypted_key = encrypted_key
       jwe.iv = iv
       kid = jwe.header['kid']
       key = case key_or_set
-           when  KeySet
+           when  JSON::JWK::KeySet
              (key_or_set.keys.length == 1) ? key_or_set.keys[0] : key_or_set[kid].to_key
             else
               key_or_set
             end 
-      jwe.decrypt(key)
+      # jwe.decrypt(key)
       jwe
     end
     
-    
-    private 
-    
   
     def algorithm
-      header[:alg]
+      header[:alg] || header['alg']
     end
     
     def integrity
-        header[:int]
+      header[:int] || header['int']
     end
     
 
     def encoding
-      header[:enc]
+      header[:enc] ||  header["enc"]
     end
 
 
+    def ivec
+      _ivec = (header[:iv] ||  header["iv"])
+      _ivec.nil? ? nil : UrlSafeBase64.decode64(_ivec)
+    end
+    
     def generate_cmk(alg)
-      cipher = OpenSSL::Cipher::Cipher.new(alg)
-      cmk = OpenSSL::Random.random_bytes(cipher.key_len)
-      header[:iv] = OpenSSL::Random.random_bytes(cipher.iv_len)
+      cipher = OpenSSL::Cipher::Cipher.new(openssl_encoding(alg))
+      @cmk = OpenSSL::Random.random_bytes(cipher.key_len)
+      iv = OpenSSL::Random.random_bytes(cipher.iv_len)
+      header[:iv] = UrlSafeBase64.encode64(iv)
     end
 
-    def generate_cipher(alg, encrypt, key, iv)
-      cipher = OpenSSL::Cipher::Cipher.new(alg)
+    def generate_cipher(enc, encrypt, key, ivec)
+      cipher = OpenSSL::Cipher::Cipher.new(enc)
       if encrypt 
         cipher.encrypt 
       else
         cipher.decrypt
       end
       cipher.key = key
-      cipher.iv = iv
+      cipher.iv = ivec
       cipher
     end
     
@@ -131,17 +135,17 @@ module JSON
     end
     
     def derive_key(cmk,key_length,pubSuppInfo)
-      cipher
+      cmk
     end
     
     
     def encrypt_cmk(key, cipher)
-      key.public_encrypt(cipher.key)
+      key.private? ? key.private_encrypt(cipher) : key.public_encrypt(cipher)
     end
   
   
     def decrypt_cmk(key,encrypted_cek)
-      cmk = key.public_decrypt(encrypted_key)
+      cmk = key.private? ? key.private_decrypt(encrypted_key) : key.public_decrypt(encrypted_key)
       cmk
     end
     
@@ -158,7 +162,7 @@ module JSON
     def sign(signature_base_string, private_key_or_secret)        
       if valid_int?(integrity)
         secret = private_key_or_secret
-        OpenSSL::HMAC.digest digest, secret, signature_base_string
+        OpenSSL::HMAC.digest digest(integrity), secret, signature_base_string
       else
         raise InvalidFormat.new('Signature Must be an HMAC algorithm')
       end
