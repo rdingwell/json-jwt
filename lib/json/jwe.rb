@@ -87,7 +87,7 @@ module JSON
             else
               key_or_set
             end 
-      # jwe.decrypt(key)
+      jwe.decrypt(key)
       jwe
     end
     
