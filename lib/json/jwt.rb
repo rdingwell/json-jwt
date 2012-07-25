@@ -38,7 +38,7 @@ module JSON
     end
 
     def [](key)
-      super || with_indifferent_access[key]
+      super
     end
 
     def to_s
@@ -58,9 +58,19 @@ module JSON
           UrlSafeBase64.decode64 segment.to_s
         end
         signature_base_string = jwt_string.split('.')[0, 2].join('.')
-        jwt = new JSON.parse(claims)
-        jwt.header = JSON.parse(header).with_indifferent_access
-        jwt.verify signature_base_string, signature, public_key_or_secret
+
+        jwt = new JSON.parse(claims, :symbolize_names => true)
+        jwt.header = JSON.parse(header, :symbolize_names => true).with_indifferent_access
+        
+        kid = jwt.header['kid']
+        key = case public_key_or_secret
+          when JWK::KeySet
+           public_key_or_secret[kid].to_key
+          else
+            public_key_or_secret
+        end 
+        jwt.verify signature_base_string, signature, key    
+
         jwt
       rescue JSON::ParserError
         raise InvalidFormat.new("Invalid JSON Format")
@@ -81,4 +91,6 @@ module JSON
 end
 
 require 'json/jws'
+require 'json/jwa'
+require 'json/jwk'
 require 'json/jwe'

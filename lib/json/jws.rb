@@ -18,6 +18,13 @@ module JSON
       raise VerificationFailed
     end
 
+    def encrypt(key,alg,enc=:SHA256CBC,int=:HS256)
+       jwe = JSON::JWE.new({alg:alg, enc:enc, int:int})
+       jwe.data = self.signature
+       jwe.encrypt(key)
+    end
+
+   
     private
 
     def algorithm
