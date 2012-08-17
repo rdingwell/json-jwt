@@ -104,6 +104,10 @@ module JSON
     def encoding
       header[:enc] ||  header["enc"]
     end
+    
+    def kdf
+      header[:enc] ||  header["enc"]
+    end
 
 
     def ivec
@@ -134,8 +138,11 @@ module JSON
       [derive_key(cmk,key_length,"Encryption"),derive_key(cmk,key_length,"Integrity")]
     end
     
-    def derive_key(cmk,key_length,pubSuppInfo)
-      cmk
+    def derive_key(cmk,key_length,pubSuppInfo)      
+      input = [0,0,0,1] +cmk.bytes + pubSuppInfo.bytes
+      d = digest("CS256")
+      h = d.digest input
+      h.to_s.bytes
     end
     
     

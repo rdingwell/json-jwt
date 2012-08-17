@@ -16,7 +16,9 @@ module JSON
       ALG = [:RSA1_5, "RSA-OAEP", "ECDH-ES",:A128KW, :A256KW]
       ENC = [:A128CBC ,:A256CBC, :A128GCM, :A256GCM]
       INT = [:HS256, :HS384, :HS512]
-
+      KDF = [:CS256, :CS384, :CS512]
+      
+      
       def valid_alg?(alg)
         ALG.collect(&:to_s).include? alg.to_s
       end
@@ -31,6 +33,10 @@ module JSON
       
       def aead?(alg)
         [:A128GCM, :A256GCM].collect(&:to_s).include? alg.to_s
+      end
+      
+      def valid_kdf?(alg)
+        KDF.collect(&:to_s).include? alg.to_s
       end
       
       def openssl_encoding(encoding)
