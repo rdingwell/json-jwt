@@ -42,9 +42,9 @@ module JSON
         verify(cik)
       end
       cipher = generate_cipher(openssl_encoding(encoding),false, cek, ivec)
-      data = cipher.update(cipher_text)
-      data << cipher.final
-      data
+      @data = cipher.update(cipher_text)
+      @data << cipher.final
+      @data
     end
     
 
@@ -139,10 +139,10 @@ module JSON
     end
     
     def derive_key(cmk,key_length,pubSuppInfo)      
-      input = [0,0,0,1] +cmk.bytes + pubSuppInfo.bytes
+      input = [0,0,0,1] +cmk.bytes.to_a + pubSuppInfo.bytes.to_a
       d = digest("CS256")
-      h = d.digest input
-      h.to_s.bytes
+      h = d.digest(input.pack('C*'))
+      h.to_s
     end
     
     
