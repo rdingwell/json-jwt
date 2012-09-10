@@ -9,11 +9,14 @@ module JSON
     attr_accessor :encrypted_key
     attr_accessor :cmk
     attr_accessor :iv
+    attr_accessor :cek
+    attr_accessor :cik
+    
     def initialize(jwt)
       @header = { :alg => :RSA1_5,
                   :enc => :A256CBC,
                   :int => :HS256,
-                  :type => :JWE
+                  :typ => :JWE
       }
       
     end
@@ -24,23 +27,23 @@ module JSON
       
       header[:kid] = kid
       generate_cmk(encoding)
-      cek,cik = derive_keys(cmk,1) 
+      @cek,@cik = derive_keys(cmk,1) 
       @encrypted_key = encrypt_cmk(key,cmk)
       cipher = generate_cipher(openssl_encoding(encoding),true, cek, ivec)
       @cipher_text = cipher.update(data)
       @cipher_text << cipher.final
       sb = signature_base_string
-      
+      unless aead?(encoding) 
+        header[:kdf] = :CS256
+      end
       aead?(encoding) ? sb + "." : "#{sb}.#{UrlSafeBase64.encode64(sign(sb,cik))}"
     end
     
     def decrypt(key)
       alg = header[:enc]
       cmk = decrypt_cmk(key, encrypted_key)
-      cek,cik = derive_keys(cmk,1)
-      unless aead?(encoding) 
-        verify(cik)
-      end
+      @cek,@cik = derive_keys(cmk,1)
+     
       cipher = generate_cipher(openssl_encoding(encoding),false, cek, ivec)
       @data = cipher.update(cipher_text)
       @data << cipher.final
@@ -55,8 +58,8 @@ module JSON
     end
 
 
-    def verify(cik)
-      raise "Verification Error" unless iv == OpenSSL::HMAC.digest( digest(integrity), cik, signature_base_string)
+    def verify(sig)
+      raise "Verification Error" unless iv == OpenSSL::HMAC.digest( digest(integrity), cik, sig)
       true
     end
     
@@ -75,6 +78,10 @@ module JSON
         UrlSafeBase64.decode64 segment.to_s
       end
       
+       encoded_header, encoded_encrypted_key, encoded_cipher_text, encoded_iv = jwe_string.split('.', 4).collect do |segment|
+         segment
+       end
+      
       jwe = JWE.new nil
       jwe.header = JSON.parse(header)
       jwe.cipher_text = cipher_text
@@ -88,6 +95,7 @@ module JSON
               key_or_set
             end 
       jwe.decrypt(key)
+      jwe.verify("#{encoded_header}.#{encoded_encrypted_key}.#{encoded_cipher_text}")
       jwe
     end
     
